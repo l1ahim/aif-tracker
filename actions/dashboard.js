@@ -152,5 +152,8 @@ export async function getDashboardData() {
     orderBy: { date: "desc" },
   });
 
+  // Add revalidation to ensure fresh data
+  revalidatePath("/dashboard");
+
   return transactions.map(serializeTransaction);
 }

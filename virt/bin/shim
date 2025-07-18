@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+export NODE_PATH='/Users/nilatac/Documents/projects/private/aif-tracker/virt/lib/node_modules'
+export NPM_CONFIG_PREFIX='/Users/nilatac/Documents/projects/private/aif-tracker/virt'
+export npm_config_prefix='/Users/nilatac/Documents/projects/private/aif-tracker/virt'
+exec '/Users/nilatac/Documents/projects/private/aif-tracker/virt/bin/node' "$@"

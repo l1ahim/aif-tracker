@@ -51,6 +51,9 @@ export async function getCurrentBudget(accountId) {
       },
     });
 
+    // Add explicit revalidation to ensure fresh data
+    revalidatePath("/dashboard");
+
     return {
       budget: budget ? { ...budget, amount: budget.amount.toNumber() } : null,
       currentExpenses: expenses._sum.amount

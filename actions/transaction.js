@@ -92,6 +92,7 @@ export async function createTransaction(data) {
 
     revalidatePath("/dashboard");
     revalidatePath(`/account/${transaction.accountId}`);
+    revalidatePath("/");
 
     return { success: true, data: serializeAmount(transaction) };
   } catch (error) {

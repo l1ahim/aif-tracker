@@ -1,0 +1,13 @@
+.App {
+  min-height: 100vh;
+}
+
+/* Loading states */
+.loading {
+  @apply flex items-center justify-center min-h-screen;
+}
+
+/* Auth pages */
+.auth-container {
+  @apply min-h-screen bg-gray-50 flex items-center justify-center;
+}

@@ -116,9 +116,12 @@ export function AddTransactionForm({
           : "Transaction created successfully"
       );
       reset();
+      
+      // Force router refresh to update all data
+      router.refresh();
       router.push(`/account/${transactionResult.data.accountId}`);
     }
-  }, [transactionResult, transactionLoading, editMode]);
+  }, [transactionResult, transactionLoading, editMode, router, reset]);
 
   const type = watch("type");
   const isRecurring = watch("isRecurring");

@@ -1,0 +1,45 @@
+# FastAPI and web framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Database and ORM
+sqlalchemy==2.0.23
+alembic==1.13.1
+psycopg2-binary==2.9.9
+
+# Data validation and settings
+pydantic==2.5.2
+pydantic-settings==2.1.0
+
+# File uploads and form handling
+python-multipart==0.0.6
+
+# Authentication and security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+PyJWT==2.8.0
+
+# AI and image processing
+google-generativeai==0.3.2
+pillow==10.1.0
+pillow-heif==0.13.0  # HEIF/HEIC support
+python-magic==0.4.27
+
+# External integrations
+stripe==7.8.0
+sendgrid==6.11.0
+
+# Data processing
+pandas==2.1.4
+numpy==1.26.2
+
+# HTTP requests
+requests==2.31.0
+
+# Development and testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.2
+
+# Production dependencies
+gunicorn==21.2.0
