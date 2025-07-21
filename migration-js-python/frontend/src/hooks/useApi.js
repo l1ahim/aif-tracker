@@ -2,56 +2,52 @@ import { useState } from 'react'
 import { useAuth } from '@clerk/clerk-react'
 import toast from 'react-hot-toast'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 const isDevelopmentMode = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY === undefined || 
                          import.meta.env.VITE_CLERK_PUBLISHABLE_KEY === 'pk_test_development_fallback'
+
+// Check if we're in development or production
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export const useApi = () => {
   const auth = isDevelopmentMode ? { getToken: () => Promise.resolve('dev-token-123') } : useAuth()
   const { getToken } = auth
   const [loading, setLoading] = useState(false)
 
-  const apiCall = async (endpoint, options = {}) => {
+  const apiCall = async (url, options = {}) => {
     setLoading(true)
     try {
+      console.log(`API Call: ${API_BASE_URL}${url}`, options)
+      
       const token = await getToken()
       
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        mode: 'cors',
+      const response = await fetch(`${API_BASE_URL}${url}`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`,
           ...options.headers,
         },
         ...options,
       })
 
+      console.log('API Response status:', response.status)
+      console.log('API Response headers:', response.headers)
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.detail || `HTTP ${response.status}`)
+        const errorData = await response.text()
+        console.error('API Error response:', errorData)
+        throw new Error(`HTTP ${response.status}: ${errorData}`)
       }
 
       const data = await response.json()
+      console.log('API Response data:', data)
       return data
     } catch (error) {
-      console.error('API Error:', error)
+      console.error('API Call failed:', error)
       
-      // Handle specific error types
-      if (error.message.includes('Failed to fetch')) {
-        toast.error('Unable to connect to server. Please check your connection.')
-      } else if (error.message.includes('401')) {
-        toast.error('Authentication required. Please log in again.')
-      } else if (error.message.includes('403')) {
-        toast.error('Access denied. You do not have permission for this action.')
-      } else if (error.message.includes('500')) {
-        toast.error('Server error. Please try again later.')
-      } else {
-        toast.error(error.message || 'An unexpected error occurred')
-      }
-      
-      // In development mode, return mock data for common endpoints
-      if (isDevelopmentMode) {
-        return getMockData(endpoint)
+      // Check if it's a network error
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        throw new Error(`Cannot connect to backend server at ${API_BASE_URL}. Please ensure the server is running.`)
       }
       
       throw error
@@ -78,7 +74,6 @@ export const useApi = () => {
 
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
-        mode: 'cors',
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -222,10 +217,20 @@ export const useTransactions = () => {
     return uploadFile('/transactions/scan-receipt', file)
   }
 
-  const createTransaction = (transactionData) => {
-    return apiCall('/transactions', {
+  const createTransaction = async (transactionData) => {
+    console.log('Creating transaction:', transactionData)
+    
+    // Validate required fields before sending
+    const requiredFields = ['description', 'merchant', 'amount', 'category', 'transaction_type', 'date']
+    const missing = requiredFields.filter(field => !transactionData[field])
+    
+    if (missing.length > 0) {
+      throw new Error(`Missing required fields: ${missing.join(', ')}`)
+    }
+    
+    return apiCall('/api/transactions', {
       method: 'POST',
-      body: JSON.stringify(transactionData),
+      body: JSON.stringify(transactionData)
     })
   }
 
@@ -252,3 +257,27 @@ export const useTransactions = () => {
     loading,
   }
 }
+     
+  const deleteTransaction = (transactionId) => {
+    return apiCall(`/transactions/${transactionId}`, {
+      method: 'DELETE'
+    })
+  }
+
+  const updateTransaction = (transactionId, updateData) => {
+    return apiCall(`/transactions/${transactionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updateData),
+    })
+  }
+
+  return {
+    getTransactions,
+    scanReceipt,
+    createTransaction,
+    updateTransaction,
+    deleteTransaction,
+    getMonthlyStats,
+    loading,
+  }
+    

@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react'
 import { useTransactions } from '../hooks/useApi'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
+import { Plus, Calendar, DollarSign } from 'lucide-react'
+import { ManualTransactionForm } from '../components/ManualTransactionForm'
+import toast from 'react-hot-toast'
 
 export default function Transactions() {
-  const { getTransactions, deleteTransaction, updateTransaction, loading } = useTransactions()
+  const { getTransactions, deleteTransaction, updateTransaction, createTransaction, loading } = useTransactions()
   const [transactions, setTransactions] = useState([])
   const [expandedDescriptions, setExpandedDescriptions] = useState(new Set())
-  const [selectedPeriod, setSelectedPeriod] = useState(30) // days
+  const [selectedPeriod, setSelectedPeriod] = useState(30)
+  const [showManualForm, setShowManualForm] = useState(false)
 
   const handleUpdateTransaction = async (transactionId, field, value) => {
     if (!value.trim()) return
@@ -27,9 +31,82 @@ export default function Transactions() {
       try {
         await deleteTransaction(transactionId)
         setTransactions(prev => prev.filter(t => t.id !== transactionId))
+        toast.success('Transaction deleted successfully')
       } catch (error) {
         console.error('Failed to delete transaction:', error)
+        toast.error('Failed to delete transaction')
       }
+    }
+  }
+
+  const handleManualTransactionSubmit = async (transactionData) => {
+    try {
+      console.log('=== TRANSACTION SUBMISSION DEBUG ===')
+      console.log('1. Original form data:', transactionData)
+      
+      const payload = {
+        description: transactionData.description,
+        merchant: transactionData.merchant,
+        amount: Number(transactionData.amount),
+        category: transactionData.category,
+        transaction_type: transactionData.transaction_type,
+        date: transactionData.date,
+        processing_status: 'completed',
+        manually_verified: true
+      }
+      
+      console.log('3. Final payload to send:', payload)
+      console.log('4. Calling createTransaction...')
+      
+      const newTransaction = await createTransaction(payload)
+      
+      if (!newTransaction) {
+        throw new Error('No transaction returned from server')
+      }
+      
+      setTransactions(prev => [newTransaction, ...prev])
+      setShowManualForm(false)
+      toast.success('Transaction added successfully!')
+    } catch (error) {
+      console.error('=== TRANSACTION SUBMISSION ERROR ===')
+      console.error('Full error object:', error)
+      
+      let errorMessage = 'Unknown error'
+      
+      if (error.response?.data) {
+        const data = error.response.data
+        if (typeof data === 'string') {
+          errorMessage = data
+        } else if (data?.detail) {
+          if (Array.isArray(data.detail)) {
+            errorMessage = data.detail.map(d => d.msg || d.message || JSON.stringify(d)).join(', ')
+          } else {
+            errorMessage = data.detail
+          }
+        } else if (data?.message) {
+          errorMessage = data.message
+        } else if (data?.error) {
+          errorMessage = data.error
+        } else {
+          errorMessage = JSON.stringify(data)
+        }
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      if (error.response?.status === 400) {
+        toast.error(`Invalid data: ${errorMessage}`)
+      } else if (error.response?.status === 422) {
+        toast.error(`Validation error: ${errorMessage}`)
+      } else if (error.response?.status === 500) {
+        toast.error(`Server error: ${errorMessage}`)
+      } else if (!error.response) {
+        toast.error('Cannot connect to backend server. Please check if the server is running.')
+      } else {
+        toast.error(`Failed to add transaction: ${errorMessage}`)
+      }
+      
+      throw error
     }
   }
 
@@ -46,12 +123,31 @@ export default function Transactions() {
   }
 
   useEffect(() => {
-    getTransactions()
-      .then(data => {
-        const sorted = data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-        setTransactions(sorted)
-      })
-      .catch(console.error)
+    const loadTransactions = async () => {
+      try {
+        console.log('Testing backend connection...')
+        const data = await getTransactions()
+        if (Array.isArray(data)) {
+          const sorted = data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+          setTransactions(sorted)
+          console.log('Backend connection successful')
+        } else {
+          console.error('Invalid transaction data received:', data)
+          setTransactions([])
+          toast.error('Failed to load transactions: Invalid data format')
+        }
+      } catch (error) {
+        console.error('Backend connection failed:', error)
+        setTransactions([])
+        if (error.message.includes('Cannot connect')) {
+          toast.error('Backend server is not running. Please start the server.')
+        } else {
+          toast.error('Failed to load transactions')
+        }
+      }
+    }
+    
+    loadTransactions()
   }, [])
 
   // Calculate merchant spending data for selected period
@@ -60,14 +156,22 @@ export default function Transactions() {
     cutoffDate.setDate(cutoffDate.getDate() - selectedPeriod)
     
     const merchantTotals = {}
-    const filteredTransactions = transactions.filter(t => 
-      t.transaction_type === 'expense' && 
-      new Date(t.date) >= cutoffDate
-    )
+    const filteredTransactions = transactions.filter(t => {
+      // Add safety checks
+      if (!t || !t.date || t.transaction_type !== 'expense') return false
+      
+      try {
+        return new Date(t.date) >= cutoffDate
+      } catch (error) {
+        console.warn('Invalid date format:', t.date)
+        return false
+      }
+    })
     
     filteredTransactions.forEach(transaction => {
       const merchant = transaction.merchant || 'Unknown'
-      merchantTotals[merchant] = (merchantTotals[merchant] || 0) + transaction.amount
+      const amount = parseFloat(transaction.amount) || 0
+      merchantTotals[merchant] = (merchantTotals[merchant] || 0) + amount
     })
     
     return Object.entries(merchantTotals)
@@ -85,7 +189,25 @@ export default function Transactions() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Transactions</h1>
+      {/* Header with Add Transaction Button */}
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Transactions</h1>
+        <button
+          onClick={() => setShowManualForm(true)}
+          className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add Transaction</span>
+        </button>
+      </div>
+
+      {/* Manual Transaction Form Modal */}
+      <ManualTransactionForm
+        isOpen={showManualForm}
+        onClose={() => setShowManualForm(false)}
+        onSubmit={handleManualTransactionSubmit}
+        loading={loading}
+      />
       
       {/* Merchant Spending Chart */}
       {merchantData.length > 0 && (
@@ -148,6 +270,7 @@ export default function Transactions() {
         </div>
       )}
       
+      {/* Transactions Table */}
       <div className="bg-white shadow rounded-lg overflow-hidden overflow-x-auto">
         <div className="px-6 py-4 bg-gray-50 border-b">
           <div className="flex justify-between items-center">
@@ -157,6 +280,7 @@ export default function Transactions() {
             </div>
           </div>
         </div>
+        
         <table className="w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -183,8 +307,17 @@ export default function Transactions() {
           <tbody className="bg-white divide-y divide-gray-200">
             {transactions.length === 0 ? (
               <tr>
-                <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
-                  No transactions found
+                <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                  <div className="flex flex-col items-center space-y-3">
+                    <DollarSign className="w-12 h-12 text-gray-300" />
+                    <p>No transactions found</p>
+                    <button
+                      onClick={() => setShowManualForm(true)}
+                      className="text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      Add your first transaction
+                    </button>
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -213,8 +346,10 @@ export default function Transactions() {
                       />
                     )}
                   </td>
-                  <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900 font-bold">
-                    {transaction.amount.toFixed(2)} lei
+                  <td className="px-3 py-4 whitespace-nowrap text-sm font-bold">
+                    <span className={transaction.transaction_type === 'income' ? 'text-green-600' : 'text-red-600'}>
+                      {transaction.transaction_type === 'income' ? '+' : '-'}{transaction.amount.toFixed(2)} lei
+                    </span>
                   </td>
                   <td className="px-3 py-4 text-sm text-gray-500 max-w-xs">
                     {transaction.category || (
@@ -227,7 +362,7 @@ export default function Transactions() {
                     )}
                   </td>
                   <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <div>Receipt: {new Date(transaction.date).toLocaleDateString()}</div>
+                    <div>Transaction: {new Date(transaction.date).toLocaleDateString()}</div>
                     <div className="text-xs text-gray-400">
                       Added: {new Date(transaction.created_at).toLocaleDateString()}
                     </div>
